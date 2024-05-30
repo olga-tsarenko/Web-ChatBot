@@ -1,54 +1,50 @@
-
 class ChatBot extends HTMLElement {
     constructor() {
         super()
         // Attach a shadow root to the element.
-        this.attachShadow({mode: "open"})
+        this.attachShadow({ mode: "open" });
+
         this.isOpen = false
         this.messages = []
-
     }
 
     connectedCallback() {
         this.render()
         this.addEventListeners()
-        console.log('test');
-    }
-
-    disconnectedCallback() {
-
     }
 
     render() {
-        console.log('this.messages', this.messages);
         this.shadowRoot.innerHTML = `
-      ${!this.isOpen ? `<button class="start-chat-btn">start</button>` : ''}
-      <div class="chat-window">
-        <div class="chat-log">
-            ${this.messages
-            .map(
-                (msg) => `
-                    <div class="message ${msg.role}">${msg.content}</div>
-                    ${msg.actions ? msg.actions.map((action) => `<li>${action}</li>`).join("") : ''}
-                `
-            )
-            .join("")}
-        </div>
-        <div class="chat-input">
-          <input class='chat-input-message' type="text" placeholder="Type a message...">
-          <button class="send-btn" >Send</button>
-        </div>
-      </div>
-    `
+            <link rel="stylesheet" href="main.css">
+            <div class="chat-window">
+                <div class="chat-log"></div>
+                <div class="chat-input">
+                    <input type="text" class="chat-input-message" placeholder="Type a message...">
+                    <button class="send-btn">Send</button>
+                </div>
+            </div>
+        `
+        this.updateChatLog()
     }
 
+    updateChatLog() {
+        const chatLog = this.shadowRoot.querySelector('.chat-log')
+        chatLog.innerHTML = this.messages
+            .map(
+                (msg) => `
+                    <div class="message-${msg.role}">
+                        <p class="message">${msg.content}</p>
+                        ${msg.role === 'assistant' && msg.actions ? `<ul>${msg.actions.map(action => `<li>${action}</li>`).join('')}</ul>` : ''}
+                    </div>
+                `
+            )
+            .join("")
+    }
 
     async sendMessage(message) {
         this.messages.push({ role: "user", content: message })
-        this.render()
+        this.updateChatLog()
         this.addEventListeners()
-
-        console.log(message);
 
         try {
             const response = await fetch("http://localhost:3030", {
@@ -65,18 +61,15 @@ class ChatBot extends HTMLElement {
 
             const data = await response.json()
 
-            console.log('data', data);
-
             this.messages.push({
                 role: "assistant",
-                content: data.text || "Sorry, I didn't understand that.",
-                actions: Array.isArray(data.actions) ? data.actions : Object.keys(data.actions)
+                content: data.text,
+                actions: data.hasOwnProperty('actions') ? Object.keys(data.actions) : ''
             })
 
-            this.render()
+            this.updateChatLog()
             this.addEventListeners()
 
-            // Return focus to the input
             const inputField = this.shadowRoot.querySelector(".chat-input input")
             if (inputField) {
                 inputField.focus()
@@ -88,20 +81,21 @@ class ChatBot extends HTMLElement {
                 role: "assistant",
                 content: "Sorry, there was an error processing your message.",
             })
+            this.updateChatLog()
         }
     }
 
-    handleStartChat() {
-        this.isOpen = !this.isOpen
-        this.sendMessage('start')
-    }
-
     handleSendButtonClick() {
-        console.log('handleSendButtonClick', this);
         const inputField = this.shadowRoot.querySelector(".chat-input-message")
         if (inputField.value.trim()) {
             this.sendMessage(inputField.value.trim())
             this.clearAndFocusInput(inputField)
+        }
+    }
+
+    handleInputEnter(event) {
+        if (event.key === "Enter") {
+            this.handleSendButtonClick();
         }
     }
 
@@ -111,13 +105,11 @@ class ChatBot extends HTMLElement {
     }
 
     addEventListeners() {
-        this.shadowRoot
-            .querySelector(".start-chat-btn")
-            .addEventListener("click", this.handleStartChat.bind(this))
+        const sendButton = this.shadowRoot.querySelector(".send-btn");
+        const inputField = this.shadowRoot.querySelector(".chat-input-message");
 
-        this.shadowRoot.querySelector(".send-btn")
-            .addEventListener("click", this.handleSendButtonClick.bind(this))
-
+        sendButton.addEventListener("click", this.handleSendButtonClick.bind(this));
+        inputField.addEventListener("keypress", this.handleInputEnter.bind(this));
     }
 }
 
